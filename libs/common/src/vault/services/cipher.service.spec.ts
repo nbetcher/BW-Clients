@@ -679,8 +679,7 @@ describe("Cipher Service", () => {
     });
 
     it("excludes partial (PAM-gated) ciphers from rotation", async () => {
-      // Drive the real cipherViews$ chain (getAllDecryptedIncludingPartials ->
-      // cipherViewsWithPartials$ -> filter) rather than the mock the surrounding beforeEach installs.
+      // Drop the beforeEach mock so the real cipherViews$ filter chain runs.
       (cipherService.cipherViews$ as jest.Mock).mockRestore();
 
       const normal = new CipherView(encryptionContext.cipher);
@@ -699,8 +698,6 @@ describe("Cipher Service", () => {
 
       const result = await cipherService.getRotatedData(originalUserKey, newUserKey, mockUserId);
 
-      // Only the non-partial cipher is re-encrypted; rotating a partial would clobber the
-      // server-suppressed fields with the blanks the client holds.
       expect(cipherEncryptionService.encryptCipherForRotation).toHaveBeenCalledTimes(1);
       expect(cipherEncryptionService.encryptCipherForRotation).toHaveBeenCalledWith(
         normal,
@@ -843,8 +840,7 @@ describe("Cipher Service", () => {
       partial.id = "partial" as CipherId;
       partial.partial = true;
 
-      // Drive the shared full-view source directly. The `PM22134SdkCipherListView` flag defaults
-      // to false in this suite, so `cipherListViewsWithPartials$` falls back to this source too.
+      // The PM22134SdkCipherListView flag is off in this suite, so both streams derive from this.
       (cipherService as any).cipherViewsWithPartials$ = jest
         .fn()
         .mockReturnValue(of([normal, partial]));
@@ -1142,8 +1138,6 @@ describe("Cipher Service", () => {
     const normal_id = "44444444-4444-4444-4444-444444444444";
 
     it("passes gated ciphers through the SDK like any other cipher", async () => {
-      // The SDK now decrypts restricted ciphers itself (into a `partial` view), so the
-      // service no longer partitions them out or hand-decrypts them.
       const gatedCipher = new Cipher({ ...cipherData, id: gated_id, organizationId: orgId });
       gatedCipher.partialData = '{"Name":"enc-name"}';
       const normalCipher = new Cipher({ ...cipherData, id: normal_id, organizationId: orgId });
@@ -1161,7 +1155,6 @@ describe("Cipher Service", () => {
         userId,
       );
 
-      // Both ciphers — the gated one included — are handed to the SDK unchanged.
       expect(cipherEncryptionService.decryptManyLegacy).toHaveBeenCalledWith(
         [gatedCipher, normalCipher],
         userId,
