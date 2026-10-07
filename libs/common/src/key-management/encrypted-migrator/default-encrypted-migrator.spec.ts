@@ -20,6 +20,7 @@ import { UserId } from "../../types/guid";
 import { CipherService } from "../../vault/abstractions/cipher.service";
 import { InternalMasterPasswordServiceAbstraction } from "../master-password/abstractions/master-password.service.abstraction";
 
+import { BiometricEnrollmentPromptService } from "./biometric-enrollment-prompt.service";
 import { DefaultEncryptedMigrator } from "./default-encrypted-migrator";
 import { BiometricPersistentMigration } from "./migrations/biometric-persistent-encryption-migration";
 import { EncryptedMigration } from "./migrations/encrypted-migration";
@@ -35,6 +36,7 @@ jest.mock("./migrations/user-key-id-backfill-migration");
 describe("EncryptedMigrator", () => {
   const mockKdfConfigService = mock<KdfConfigService>();
   const mockStateProvider = mock<StateProvider>();
+  const mockBiometricEnrollmentPromptService = mock<BiometricEnrollmentPromptService>();
   const mockLogService = mock<LogService>();
   const configService = mock<ConfigService>();
   const masterPasswordService = mock<InternalMasterPasswordServiceAbstraction>();
@@ -97,6 +99,7 @@ describe("EncryptedMigrator", () => {
       mockCipherService,
       mockSdkService,
       mockStateProvider,
+      mockBiometricEnrollmentPromptService,
     );
   });
 

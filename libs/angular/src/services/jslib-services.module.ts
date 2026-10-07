@@ -205,8 +205,10 @@ import { AccountCryptographicStateService } from "@bitwarden/common/key-manageme
 import { DefaultAccountCryptographicStateService } from "@bitwarden/common/key-management/account-cryptography/default-account-cryptographic-state.service";
 import { DeviceTrustServiceAbstraction } from "@bitwarden/common/key-management/device-trust/abstractions/device-trust.service.abstraction";
 import { DeviceTrustService } from "@bitwarden/common/key-management/device-trust/services/device-trust.service.implementation";
+import { BiometricEnrollmentPromptService } from "@bitwarden/common/key-management/encrypted-migrator/biometric-enrollment-prompt.service";
 import { DefaultEncryptedMigrator } from "@bitwarden/common/key-management/encrypted-migrator/default-encrypted-migrator";
 import { EncryptedMigrator } from "@bitwarden/common/key-management/encrypted-migrator/encrypted-migrator.abstraction";
+import { NoopBiometricEnrollmentPromptService } from "@bitwarden/common/key-management/encrypted-migrator/noop-biometric-enrollment-prompt.service";
 import { KeyConnectorApiService } from "@bitwarden/common/key-management/key-connector/abstractions/key-connector-api.service";
 import { KeyConnectorService as KeyConnectorServiceAbstraction } from "@bitwarden/common/key-management/key-connector/abstractions/key-connector.service";
 import { DefaultKeyConnectorApiService } from "@bitwarden/common/key-management/key-connector/services/default-key-connector-api.service";
@@ -619,7 +621,13 @@ const safeProviders: SafeProvider[] = [
       CipherServiceAbstraction,
       SdkService,
       StateProvider,
+      BiometricEnrollmentPromptService,
     ],
+  }),
+  safeProvider({
+    provide: BiometricEnrollmentPromptService,
+    useClass: NoopBiometricEnrollmentPromptService,
+    deps: [],
   }),
   safeProvider({
     provide: LoginStrategyCacheService,

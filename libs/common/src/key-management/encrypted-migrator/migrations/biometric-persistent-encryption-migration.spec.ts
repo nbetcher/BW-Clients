@@ -11,6 +11,10 @@ import { CryptoClient } from "@bitwarden/sdk-internal";
 import { Utils } from "../../../platform/misc/utils";
 import { UserId } from "../../../types/guid";
 import { UserKey } from "../../../types/key";
+import {
+  BiometricEnrollmentChoice,
+  BiometricEnrollmentPromptService,
+} from "../biometric-enrollment-prompt.service";
 
 import { BiometricPersistentMigration } from "./biometric-persistent-encryption-migration";
 
@@ -30,13 +34,14 @@ describe("BiometricPersistentMigration", () => {
   const mockBiometricsService = mock<BiometricsService>();
   const mockBiometricStateService = mock<BiometricStateService>();
   const mockLogService = mock<LogService>();
+  const mockPromptService = mock<BiometricEnrollmentPromptService>();
 
   let sut: BiometricPersistentMigration;
 
   const mockUserId = "00000000-0000-0000-0000-000000000000" as UserId;
   const mockUserKey = new SymmetricCryptoKey(new Uint8Array(64)) as UserKey;
   const mockKeyId = new Uint8Array([1, 2, 3, 4]);
-  const mockKeyIdB64 = Utils.fromBufferToB64(mockKeyId);
+  const mockKeyIdHex = Utils.fromArrayToHex(mockKeyId);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -46,6 +51,7 @@ describe("BiometricPersistentMigration", () => {
       mockBiometricsService,
       mockBiometricStateService,
       mockLogService,
+      mockPromptService,
     );
   });
 
@@ -87,7 +93,7 @@ describe("BiometricPersistentMigration", () => {
       mockBiometricsService.hasPersistentKey.mockResolvedValue(true);
       mockKeyService.userKey$.mockReturnValue(of(mockUserKey));
       ((CryptoClient as any).get_key_id_for_symmetric_key as jest.Mock).mockReturnValue(undefined);
-      mockBiometricStateService.getBiometricEnrolledKeyId.mockResolvedValue(mockKeyIdB64);
+      mockBiometricStateService.getBiometricEnrolledKeyId.mockResolvedValue(mockKeyIdHex);
 
       const result = await sut.needsMigration(mockUserId);
 
@@ -111,7 +117,7 @@ describe("BiometricPersistentMigration", () => {
       mockBiometricsService.hasPersistentKey.mockResolvedValue(true);
       mockKeyService.userKey$.mockReturnValue(of(mockUserKey));
       ((CryptoClient as any).get_key_id_for_symmetric_key as jest.Mock).mockReturnValue(mockKeyId);
-      mockBiometricStateService.getBiometricEnrolledKeyId.mockResolvedValue(mockKeyIdB64);
+      mockBiometricStateService.getBiometricEnrolledKeyId.mockResolvedValue(mockKeyIdHex);
 
       const result = await sut.needsMigration(mockUserId);
 
@@ -140,6 +146,57 @@ describe("BiometricPersistentMigration", () => {
         mockUserId,
         mockUserKey,
       );
+    });
+
+    describe("when enrollment fails", () => {
+      const enrollmentError = new Error("Windows Hello cancelled");
+
+      beforeEach(() => {
+        mockKeyService.userKey$.mockReturnValue(of(mockUserKey));
+        mockBiometricsService.enrollPersistent.mockReset();
+      });
+
+      it("retries enrollment when the user authorizes and the authorization fails", async () => {
+        mockBiometricsService.enrollPersistent
+          .mockRejectedValueOnce(enrollmentError)
+          .mockResolvedValueOnce();
+        mockPromptService.promptRetry.mockResolvedValue(BiometricEnrollmentChoice.Authorize);
+
+        await sut.runMigrations(mockUserId, null);
+
+        expect(mockBiometricsService.enrollPersistent).toHaveBeenCalledTimes(2);
+        expect(mockBiometricsService.setBiometricProtectedUnlockKeyForUser).toHaveBeenCalledWith(
+          mockUserId,
+          mockUserKey,
+        );
+        expect(mockBiometricStateService.setBiometricUnlockEnabled).not.toHaveBeenCalled();
+      });
+
+      it("disables biometric unlock when the user chooses to", async () => {
+        mockBiometricsService.enrollPersistent.mockRejectedValue(enrollmentError);
+        mockPromptService.promptRetry.mockResolvedValue(BiometricEnrollmentChoice.Disable);
+
+        await sut.runMigrations(mockUserId, null);
+
+        expect(mockBiometricStateService.setBiometricUnlockEnabled).toHaveBeenCalledWith(
+          false,
+          mockUserId,
+        );
+        expect(mockBiometricsService.deleteBiometricUnlockKeyForUser).toHaveBeenCalledWith(
+          mockUserId,
+        );
+        expect(mockBiometricsService.setBiometricProtectedUnlockKeyForUser).not.toHaveBeenCalled();
+      });
+
+      it("leaves biometric unlock enabled when the prompt closes without a choice", async () => {
+        mockBiometricsService.enrollPersistent.mockRejectedValue(enrollmentError);
+        mockPromptService.promptRetry.mockRejectedValue(new Error("Closed by vault lock"));
+
+        await expect(sut.runMigrations(mockUserId, null)).rejects.toThrow();
+
+        expect(mockBiometricStateService.setBiometricUnlockEnabled).not.toHaveBeenCalled();
+        expect(mockBiometricsService.deleteBiometricUnlockKeyForUser).not.toHaveBeenCalled();
+      });
     });
   });
 });

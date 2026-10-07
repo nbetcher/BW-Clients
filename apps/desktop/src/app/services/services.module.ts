@@ -67,6 +67,7 @@ import { DomainSettingsService } from "@bitwarden/common/autofill/services/domai
 import { BillingAccountProfileStateService } from "@bitwarden/common/billing/abstractions";
 import { ClientType, DeviceType } from "@bitwarden/common/enums";
 import { AccountCryptographicStateService } from "@bitwarden/common/key-management/account-cryptography/account-cryptographic-state.service";
+import { BiometricEnrollmentPromptService } from "@bitwarden/common/key-management/encrypted-migrator/biometric-enrollment-prompt.service";
 import {
   InternalMasterPasswordServiceAbstraction,
   MasterPasswordServiceAbstraction,
@@ -186,6 +187,7 @@ import { DesktopFido2UnsupportedUserVerificationService } from "../../autofill/s
 import { DesktopFido2UserInterfaceService } from "../../autofill/services/desktop-fido2-user-interface.service";
 import { DesktopFido2UserVerificationService } from "../../autofill/services/desktop-fido2-user-verification.service.abstraction";
 import { DesktopFido2WindowsUserVerificationService } from "../../autofill/services/desktop-fido2-windows-user-verification.service";
+import { DesktopBiometricEnrollmentPromptService } from "../../key-management/biometrics/desktop-biometric-enrollment-prompt.service";
 import { DesktopBiometricsService } from "../../key-management/biometrics/desktop.biometrics.service";
 import { RendererBiometricsService } from "../../key-management/biometrics/renderer-biometrics.service";
 import { DesktopLockComponentService } from "../../key-management/lock/services/desktop-lock-component.service";
@@ -245,6 +247,11 @@ const safeProviders: SafeProvider[] = [
     provide: DesktopBiometricsService,
     useClass: RendererBiometricsService,
     deps: [TokenService, BiometricStateService, IpcService],
+  }),
+  safeProvider({
+    provide: BiometricEnrollmentPromptService,
+    useClass: DesktopBiometricEnrollmentPromptService,
+    deps: [DialogService],
   }),
   safeProvider({
     provide: DeviceManagementComponentServiceAbstraction,

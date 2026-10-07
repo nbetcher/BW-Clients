@@ -19,6 +19,7 @@ import { UserId } from "../../types/guid";
 import { CipherService } from "../../vault/abstractions/cipher.service";
 import { InternalMasterPasswordServiceAbstraction } from "../master-password/abstractions/master-password.service.abstraction";
 
+import { BiometricEnrollmentPromptService } from "./biometric-enrollment-prompt.service";
 import { EncryptedMigrator } from "./encrypted-migrator.abstraction";
 import { BiometricPersistentMigration } from "./migrations/biometric-persistent-encryption-migration";
 import { EncryptedMigration, MigrationRequirement } from "./migrations/encrypted-migration";
@@ -44,6 +45,7 @@ export class DefaultEncryptedMigrator implements EncryptedMigrator {
     cipherService: CipherService,
     sdkService: SdkService,
     stateProvider: StateProvider,
+    biometricEnrollmentPromptService: BiometricEnrollmentPromptService,
   ) {
     // Register migrations here
 
@@ -73,6 +75,7 @@ export class DefaultEncryptedMigrator implements EncryptedMigrator {
           biometricsService,
           biometricStateService,
           logService,
+          biometricEnrollmentPromptService,
         ),
       });
     }

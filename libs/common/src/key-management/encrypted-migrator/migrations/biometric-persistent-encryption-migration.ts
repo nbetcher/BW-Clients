@@ -8,6 +8,11 @@ import { CryptoClient } from "@bitwarden/sdk-internal";
 import { SdkLoadService } from "../../../platform/abstractions/sdk/sdk-load.service";
 import { Utils } from "../../../platform/misc/utils";
 import { UserId } from "../../../types/guid";
+import { UserKey } from "../../../types/key";
+import {
+  BiometricEnrollmentChoice,
+  BiometricEnrollmentPromptService,
+} from "../biometric-enrollment-prompt.service";
 
 import { EncryptedMigration, MigrationRequirement } from "./encrypted-migration";
 
@@ -23,6 +28,7 @@ export class BiometricPersistentMigration implements EncryptedMigration {
     private readonly biometricsService: BiometricsService,
     private readonly biometricStateService: BiometricStateService,
     private readonly logService: LogService,
+    private readonly promptService: BiometricEnrollmentPromptService,
   ) {}
 
   async needsMigration(userId: UserId): Promise<MigrationRequirement> {
@@ -41,7 +47,7 @@ export class BiometricPersistentMigration implements EncryptedMigration {
 
     await SdkLoadService.Ready;
     const keyId = CryptoClient.get_key_id_for_symmetric_key(userKey.toEncoded());
-    const currentKeyId = keyId == null ? null : Utils.fromBufferToB64(keyId);
+    const currentKeyId = keyId == null ? null : Utils.fromArrayToHex(keyId);
     const enrolledKeyId = await this.biometricStateService.getBiometricEnrolledKeyId(userId);
 
     return currentKeyId === enrolledKeyId ? "noMigrationNeeded" : "needsMigration";
@@ -57,7 +63,35 @@ export class BiometricPersistentMigration implements EncryptedMigration {
       `[BiometricPersistentMigration] Re-enrolling biometric keys for user ${userId}`,
     );
 
-    await this.biometricsService.enrollPersistent(userId, userKey);
+    if (!(await this.enrollOrDisable(userId, userKey))) {
+      return;
+    }
+
     await this.biometricsService.setBiometricProtectedUnlockKeyForUser(userId, userKey);
+  }
+
+  /**
+   * Enrolls the persistent key, asking the user how to proceed on failure (e.g. cancelled Windows
+   * Hello prompt). Retrying silently would re-prompt on every migration run; disabling silently
+   * could remove the user's only unlock method.
+   * @returns false if the user turned biometric unlock off instead
+   */
+  private async enrollOrDisable(userId: UserId, userKey: UserKey): Promise<boolean> {
+    for (;;) {
+      try {
+        await this.biometricsService.enrollPersistent(userId, userKey);
+        return true;
+      } catch (e) {
+        this.logService.error("[BiometricPersistentMigration] Re-enrollment failed", e);
+      }
+
+      if ((await this.promptService.promptRetry()) === BiometricEnrollmentChoice.Authorize) {
+        continue;
+      }
+
+      await this.biometricStateService.setBiometricUnlockEnabled(false, userId);
+      await this.biometricsService.deleteBiometricUnlockKeyForUser(userId);
+      return false;
+    }
   }
 }

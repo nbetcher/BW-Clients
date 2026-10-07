@@ -489,6 +489,10 @@ export class SettingsDialogComponent implements OnInit {
     }
 
     await this.biometricStateService.setBiometricUnlockEnabled(true, activeUserId);
+    // Stored first, so biometric unlock works even if the persistent enrollment below fails.
+    const userKey = await firstValueFrom(this.keyService.userKey$(activeUserId));
+    await this.biometricsService.setBiometricProtectedUnlockKeyForUser(activeUserId, userKey);
+
     if (this.isWindows || this.isLinux) {
       // Recommended settings for Windows Hello and Linux system authentication
       this.form.controls.autoPromptBiometrics.setValue(false);
@@ -497,13 +501,23 @@ export class SettingsDialogComponent implements OnInit {
       // If the user doesn't have a MP or PIN then they have to use biometrics on app restart.
       if (!this.userHasMasterPassword() && !this.userHasPinSet()) {
         // Allow biometric unlock on app restart so the user doesn't get into a bad state.
-        await this.enrollPersistentBiometricIfNeeded(activeUserId);
+        // A failed enrollment (e.g. cancelled Windows Hello prompt) is not fatal: the key stored
+        // above still allows biometric unlock.
+        try {
+          await this.enrollPersistentBiometricIfNeeded(activeUserId);
+        } catch (error) {
+          this.logService.error("Error enrolling persistent biometric unlock: ", error);
+          this.validationService.showError(error);
+        }
       } else {
         this.form.controls.requireMasterPasswordOnAppRestart.setValue(true);
       }
+    } else if (this.isMac) {
+      // Touch ID always persists the key. Enrolling records the enrolled key id, so the
+      // re-enrollment migration detects a key rotation.
+      await this.biometricsService.enrollPersistent(activeUserId, userKey);
     }
-    const userKey = await firstValueFrom(this.keyService.userKey$(activeUserId));
-    await this.biometricsService.setBiometricProtectedUnlockKeyForUser(activeUserId, userKey);
+
     await this.autoUnlockService.refreshAutoUnlockKey(activeUserId);
 
     // Validate the key is stored in case biometrics fail.
