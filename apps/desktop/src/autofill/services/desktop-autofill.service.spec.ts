@@ -87,11 +87,12 @@ describe("DesktopAutofillService", () => {
       delete (global as any).ipc;
     });
 
-    it("does not enable when the feature flag is off", async () => {
+    // TODO: temporarily force enabled; restore the feature flag gating test when reverting.
+    it("enables even when the feature flag is off", async () => {
       featureFlag$.next(false);
 
-      await expect(service.refreshPasskeyProviderState()).resolves.toEqual(unregistered);
-      expect(desktopAutofillIpc.setEnabled).not.toHaveBeenCalled();
+      await expect(service.refreshPasskeyProviderState()).resolves.toEqual(registered);
+      expect(desktopAutofillIpc.setEnabled).toHaveBeenCalledWith(true);
     });
 
     it("does not enable on Linux", async () => {
@@ -134,15 +135,19 @@ describe("DesktopAutofillService", () => {
       expect(desktopAutofillIpc.getPasskeyProviderState).not.toHaveBeenCalled();
     });
 
-    it("enables when the feature flag turns on after init", async () => {
+    // TODO: temporarily force enabled; restore the feature flag gating test when reverting.
+    it("enables on init even when the feature flag is off", async () => {
       featureFlag$.next(false);
       await service.init();
-      expect(desktopAutofillIpc.setEnabled).not.toHaveBeenCalled();
+      await new Promise(process.nextTick);
+
+      expect(desktopAutofillIpc.setEnabled).toHaveBeenCalledWith(true);
+      expect(desktopAutofillIpc.listenerReady).toHaveBeenCalledTimes(1);
 
       featureFlag$.next(true);
       await new Promise(process.nextTick);
 
-      expect(desktopAutofillIpc.setEnabled).toHaveBeenCalledWith(true);
+      expect(desktopAutofillIpc.setEnabled).toHaveBeenCalledTimes(2);
       expect(desktopAutofillIpc.listenerReady).toHaveBeenCalledTimes(1);
     });
   });
